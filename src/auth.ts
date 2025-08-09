@@ -297,7 +297,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       console.log("NextAuth redirect called:", { url, baseUrl, NODE_ENV: process.env.NODE_ENV });
       
       const isDevelopment = process.env.NODE_ENV === 'development';
-      const productionDomain = 'campusfy.app';
+      const productionDomain = 'campusfy-frontend.vercel.app';
       
       try {
         // Parse the URL to handle it properly

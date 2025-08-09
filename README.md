@@ -678,7 +678,7 @@ export const schoolConfigs: Record<string, SchoolConfig> = {
   newSchool: {
     name: "New University Name",
     shortName: "newSchool",
-    domain: "newschool.campusfy.app",
+    domain: "newschool.campusfy-frontend.vercel.app",
     emailDomain: "newschool.edu",
     subdomainPrefix: "newschool",
     colors: schoolThemes.newSchool,

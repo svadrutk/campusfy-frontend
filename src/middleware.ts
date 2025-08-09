@@ -10,7 +10,7 @@ const SUBDOMAIN_ONLY_PATHS: string[] = ['/search', '/classes', '/class'];
 /**
  * Production domain for the application
  */
-const MAIN_DOMAIN = 'campusfy.app';
+const MAIN_DOMAIN = 'campusfy-frontend.vercel.app';
 
 /**
  * List of internal API paths that should be protected
@@ -97,7 +97,7 @@ function isLegitimateAppRequest(request: NextRequest): boolean {
   // Check for trusted origins (localhost during development, our domains in production)
   const hasTrustedOrigin = process.env.NODE_ENV === 'development' 
     ? (origin.includes('localhost') || referer.includes('localhost'))
-    : (origin.includes('campusfy.app') || referer.includes('campusfy.app'));
+    : (origin.includes('campusfy-frontend.vercel.app') || referer.includes('campusfy-frontend.vercel.app'));
   
   // Check if the fetch is from the same site (our app)
   const isSameSite = fetchSite === 'same-origin' || fetchSite === 'same-site';
