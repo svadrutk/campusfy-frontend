@@ -2,6 +2,37 @@
 
 @plugin "tailwindcss-animate";
 
+/* Enhanced progress indicators for granular cache progress */
+@keyframes indeterminate {
+  0% { left: -50%; }
+  50% { left: 50%; }
+  100% { left: 150%; }
+}
+
+@keyframes indeterminate-slide {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(300%); }
+}
+
+/* Enhanced UI animations for preventing "boredom" */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+  100% { transform: translateX(300%); }
+}
+
+@keyframes indeterminate-stripes {
+  0% { background-position: 0 0; }
+  100% { background-position: 20px 0; }
+}
+
+@keyframes fade-in-out {
+  0% { opacity: 0; transform: translateY(5px); }
+  50% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-5px); }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

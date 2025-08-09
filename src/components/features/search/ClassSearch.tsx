@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { ClassSearchQuery } from "@/types/search";
 import { ExtendedClassData } from "@/types/classes/classTypes";
 import { useSearchStore } from '@/store/useSearchStore';
-import { getOrLoadClassData } from '@/utils/cacheUtils';
+import { getOrLoadClassData, hasCachedData } from '@/utils/cacheUtils';
 import { searchClassesAsync, fetchClassDetails, clearSearchCache } from '@/utils/search';
 import { generateEmbedding } from "@/utils/vectorSearchUtils";
 import { buildVectorIndex, searchVectorIndex } from "@/utils/vectorIndexUtils";
@@ -99,8 +99,16 @@ export default function ClassSearch({
         setIsLoading(true);
         setError(null);
         
-        // Get or load class data first
-        const classData = await getOrLoadClassData();
+        // Check if we have cached data to determine loading strategy
+        const hasCached = await hasCachedData();
+        
+        // Get or load class data - use background mode if cache exists
+        // This allows immediate UI rendering with cached data while refreshing in background
+        const classData = await getOrLoadClassData(
+          undefined, // no progress callback needed for background refresh
+          undefined, // no abort signal
+          hasCached   // use background mode if cache exists
+        );
         let filteredResults = classData;
         const expFilters = memoizedActiveFilters?.experience_filters;
 

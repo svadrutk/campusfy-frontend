@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { shouldRefreshCache, getOrLoadClassData, hasCachedData } from '@/utils/cacheUtils';
 import { schoolThemes } from '@/config/themeConfigs';
+import BackgroundRefreshBanner from './BackgroundRefreshBanner';
 
 /**
  * Type declarations for service worker synchronization
@@ -45,11 +46,36 @@ export default function CacheLoadingOverlay() {
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [isRefreshingCache, setIsRefreshingCache] = useState(false);
+  const [isIndeterminate, setIsIndeterminate] = useState(false);
   const [_retryCount, setRetryCount] = useState(0);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  
+  // Enhanced UI state for preventing "boredom"
+  const lastProgressRef = useRef(0);
+  
+  // Background refresh banner state
+  const [showBackgroundBanner, setShowBackgroundBanner] = useState(false);
+  const [backgroundProgress, setBackgroundProgress] = useState(0);
+  const [backgroundStatus, setBackgroundStatus] = useState('');
+  const [backgroundError, setBackgroundError] = useState<string | null>(null);
+  const [backgroundIsIndeterminate, setBackgroundIsIndeterminate] = useState(false);
+  
   const pathname = usePathname();
   
   // Get theme colors
   const theme = schoolThemes.wisco;
+
+  /**
+   * Enhances progress updates with visual effects
+   */
+  const handleProgressUpdate = useCallback((newStatus: string, progressValue: number, isIndeterminateMode?: boolean) => {
+    setStatus(newStatus);
+    setProgress(progressValue);
+    setIsIndeterminate(isIndeterminateMode || false);
+    
+    // Track progress for potential future use
+    lastProgressRef.current = progressValue;
+  }, []);
 
   /**
    * Determines if the current path requires cache loading
@@ -64,8 +90,8 @@ export default function CacheLoadingOverlay() {
 
   /**
    * Checks if cache needs refreshing and loads/updates if necessary
-   * Shows progress indicators during the process
-   * Sets error state if the cache loading fails
+   * Uses the new background mode for non-blocking refresh when cache exists
+   * Shows blocking overlay only for cold starts (no cache)
    */
   const checkAndLoadCache = useCallback(async () => {
     if (hasCheckedCacheThisSession || !shouldLoadCacheForPath()) return;
@@ -73,42 +99,48 @@ export default function CacheLoadingOverlay() {
     try {
       hasCheckedCacheThisSession = true;
       
+      // Create abort controller for this operation
+      const controller = new AbortController();
+      setAbortController(controller);
+      
       // Fast check to see if we have cached data
       const hasCached = await hasCachedData();
       
       if (hasCached) {
-        // Only check for refresh if we have cached data
+        // Cache exists - use background mode for non-blocking refresh
         const needsRefresh = await shouldRefreshCache();
         
         if (needsRefresh) {
-          // Only show the overlay if we actually need to refresh
-          setLoading(true);
-          setIsRefreshingCache(true);
-          setError(null);
-          setRetryCount(0);
+          console.log('Cache exists but needs refresh - using background mode');
           
-          setStatus('Updating course data...');
-          setProgress(0.1);
+          // Show background banner instead of blocking overlay
+          setShowBackgroundBanner(true);
+          setBackgroundProgress(0.1);
+          setBackgroundStatus('Checking for updates...');
+          setBackgroundError(null);
           
-          await getOrLoadClassData((newStatus: string, progressValue: number) => {
-            setStatus(newStatus);
-            setProgress(progressValue);
-          });
+          // Use background mode - this returns cached data immediately
+          // and starts refresh in background
+          await getOrLoadClassData((newStatus: string, progressValue: number, isIndeterminateMode?: boolean) => {
+            if (!controller.signal.aborted) {
+              setBackgroundStatus(newStatus);
+              setBackgroundProgress(progressValue);
+              setBackgroundIsIndeterminate(isIndeterminateMode || false);
+            }
+          }, controller.signal, true); // backgroundMode = true
           
-          setProgress(1.0);
-          setStatus('Ready!');
-          
-          // Keep the overlay visible briefly to show completion
-          setTimeout(() => {
-            setLoading(false);
-            setIsRefreshingCache(false);
-          }, 500);
+          if (!controller.signal.aborted) {
+            setBackgroundProgress(1.0);
+            setBackgroundStatus('Cache updated!');
+          }
         } else {
-          // Cache is fresh, no need to show loading state
+          // Cache is fresh, no need to show any loading state
+          console.log('Cache is fresh, no refresh needed');
           return;
         }
       } else {
-        // No cache exists, need to load from scratch
+        // No cache exists - use blocking overlay for cold start
+        console.log('No cache exists - using blocking mode');
         setLoading(true);
         setIsRefreshingCache(true);
         setError(null);
@@ -117,24 +149,37 @@ export default function CacheLoadingOverlay() {
         setStatus('Loading course data...');
         setProgress(0.1);
         
-        await getOrLoadClassData((newStatus: string, progressValue: number) => {
-          setStatus(newStatus);
-          setProgress(progressValue);
-        });
+        // Use normal blocking mode (backgroundMode = false/undefined) with enhanced progress handler
+        await getOrLoadClassData((newStatus: string, progressValue: number, isIndeterminateMode?: boolean) => {
+          if (!controller.signal.aborted) {
+            handleProgressUpdate(newStatus, progressValue, isIndeterminateMode);
+          }
+        }, controller.signal);
         
-        setProgress(1.0);
-        setStatus('Ready!');
-        
-        // Keep the overlay visible briefly to show completion
-        setTimeout(() => {
-          setLoading(false);
-          setIsRefreshingCache(false);
-        }, 500);
+        if (!controller.signal.aborted) {
+          setProgress(1.0);
+          setStatus('Ready!');
+          
+          // Keep the overlay visible briefly to show completion
+          setTimeout(() => {
+            setLoading(false);
+            setIsRefreshingCache(false);
+          }, 500);
+        }
       }
     } catch (error) {
       console.error('Error loading cache:', error);
-      setError('Failed to load course data. Please try again.');
-      setIsRefreshingCache(true);
+      
+      // Determine if this was a background operation or blocking operation
+      const hasCached = await hasCachedData();
+      if (hasCached) {
+        // Background refresh failed
+        setBackgroundError('Failed to update course data. You can continue using cached data.');
+      } else {
+        // Blocking load failed
+        setError('Failed to load course data. Please try again.');
+        setIsRefreshingCache(true);
+      }
     }
   }, [shouldLoadCacheForPath]);
 
@@ -147,52 +192,152 @@ export default function CacheLoadingOverlay() {
     checkAndLoadCache();
   }, [mounted, pathname, checkAndLoadCache]);
 
-  // Only show overlay when actually loading new data
-  if (!mounted || !loading || !isRefreshingCache) return null;
+
+
+  /**
+   * Cleanup effect to abort operations when component unmounts
+   */
+  useEffect(() => {
+    return () => {
+      if (abortController) {
+        abortController.abort();
+      }
+    };
+  }, [abortController]);
+
+  // Background banner handlers
+  const handleBackgroundBannerDismiss = useCallback(() => {
+    setShowBackgroundBanner(false);
+  }, []);
+
+  const handleBackgroundRetry = useCallback(() => {
+    setBackgroundError(null);
+    setBackgroundProgress(0);
+    setBackgroundStatus('Retrying...');
+    checkAndLoadCache();
+  }, [checkAndLoadCache]);
+
+  if (!mounted) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="max-w-sm w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
-        <h1 className="text-xl font-semibold text-center text-gray-900 dark:text-white mb-6">
-          Loading Course Data
-        </h1>
-        
-        <div className="relative w-full h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-          <div 
-            className="absolute left-0 top-0 h-full transition-all duration-300 ease-out"
-            style={{ 
-              width: `${Math.max(2, progress * 100)}%`,
-              backgroundColor: theme.primary
-            }}
-          />
-        </div>
-        
-        <div className="mt-4">
-          <p className="text-sm font-medium text-center text-gray-900 dark:text-white">
-            {status}
-          </p>
-          
-          <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-2">
-            Please wait while we prepare your course data.
-          </p>
-        </div>
+    <>
+      {/* Background refresh banner - non-blocking */}
+      <BackgroundRefreshBanner
+        isVisible={showBackgroundBanner}
+        progress={backgroundProgress}
+        status={backgroundStatus}
+        error={backgroundError}
+        isIndeterminate={backgroundIsIndeterminate}
+        onDismiss={handleBackgroundBannerDismiss}
+        onRetry={handleBackgroundRetry}
+      />
 
-        {error && (
-          <div className="text-center mt-4">
-            <p className="text-sm text-red-500 mb-2">{error}</p>
-            <button 
-              onClick={() => {
-                setError(null);
-                checkAndLoadCache();
-              }}
-              style={{ backgroundColor: theme.primary }}
-              className="text-white text-sm py-1.5 px-3 rounded-lg transition-colors hover:opacity-90"
-            >
-              Try Again
-            </button>
+      {/* Blocking overlay - only for cold starts (no cache) */}
+      {loading && isRefreshingCache && (
+        <div className="fixed inset-0 bg-gradient-to-br from-black/20 to-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="max-w-sm w-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 dark:border-gray-700/50 p-8">
+            {/* Header with clean typography */}
+            <div className="text-center mb-8">
+              <h1 className="text-xl font-bold text-center bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-100 dark:to-white bg-clip-text text-transparent">
+                Loading Course Data
+              </h1>
+            </div>
+            
+            <div className="relative w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
+              {isIndeterminate ? (
+                // Enhanced indeterminate animation with stripes
+                <div className="absolute inset-0">
+                  <div 
+                    className="h-full rounded-full"
+                    style={{ 
+                      background: `linear-gradient(45deg, 
+                        ${theme.primary}40 25%, 
+                        transparent 25%, 
+                        transparent 50%, 
+                        ${theme.primary}40 50%, 
+                        ${theme.primary}40 75%, 
+                        transparent 75%
+                      )`,
+                      backgroundSize: '20px 20px',
+                      animation: 'indeterminate-stripes 1s linear infinite'
+                    }}
+                  />
+                  <div 
+                    className="absolute inset-0 h-full rounded-full"
+                    style={{ 
+                      background: `linear-gradient(90deg, 
+                        transparent 0%, 
+                        ${theme.primary}80 50%, 
+                        transparent 100%
+                      )`,
+                      animation: 'shimmer 2s ease-in-out infinite'
+                    }}
+                  />
+                </div>
+              ) : (
+                // Enhanced determinate progress with shimmer and smoother easing
+                <div className="absolute inset-0">
+                  {/* Background gradient */}
+                  <div 
+                    className="absolute left-0 top-0 h-full transition-all duration-300 ease-out rounded-full"
+                    style={{ 
+                      width: `${Math.max(2, progress * 100)}%`,
+                      background: `linear-gradient(135deg, 
+                        ${theme.primary} 0%, 
+                        ${theme.primary}dd 30%, 
+                        ${theme.primary} 70%, 
+                        ${theme.primary}dd 100%
+                      )`,
+                      boxShadow: `0 0 8px ${theme.primary}30`
+                    }}
+                  />
+                  {/* Shimmer overlay */}
+                  <div 
+                    className="absolute left-0 top-0 h-full transition-all duration-300 ease-out rounded-full"
+                    style={{ 
+                      width: `${Math.max(2, progress * 100)}%`,
+                      background: `linear-gradient(90deg, 
+                        transparent 0%, 
+                        rgba(255,255,255,0.2) 50%, 
+                        transparent 100%
+                      )`,
+                      animation: 'shimmer 3s ease-in-out infinite'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-8">
+              {/* Enhanced status message with better typography */}
+              <div className="text-center">
+                <p className="text-sm font-semibold text-gray-600 ">
+                  {status}
+                </p>
+              </div>
+            </div>
+
+            {error && (
+              <div className="text-center mt-6 p-4 rounded-2xl bg-red-50/50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-800/30 backdrop-blur-sm">
+                <p className="text-sm font-medium text-red-600 dark:text-red-400 mb-3">{error}</p>
+                <button 
+                  onClick={() => {
+                    setError(null);
+                    checkAndLoadCache();
+                  }}
+                  style={{ 
+                    background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primary}90 100%)`,
+                    boxShadow: `0 4px 12px ${theme.primary}30`
+                  }}
+                  className="text-white text-sm font-medium py-2.5 px-6 rounded-full transition-all duration-200 hover:scale-105 hover:shadow-lg active:scale-95"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 } 
