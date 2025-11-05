@@ -11,8 +11,10 @@ import { formatClassCode } from '@/utils/helpers/formatters';
 // Get available terms
 const AVAILABLE_TERMS = getAvailableTerms();
 
-// Fall 2025 term code
-const FALL_2025_TERM_CODE = 1262;
+// Get current term code dynamically
+const getCurrentTermForDefault = () => {
+  return AVAILABLE_TERMS[0]?.value || 1262; // Fall back to first available term or a reasonable default
+};
 
 interface EnrollmentTableProps {
   classCode: string;
@@ -21,7 +23,7 @@ interface EnrollmentTableProps {
 }
 
 export default function EnrollmentTable({ classCode, term, school }: EnrollmentTableProps) {
-  const [selectedTerm, setSelectedTerm] = useState<number>(term || FALL_2025_TERM_CODE);
+  const [selectedTerm, setSelectedTerm] = useState<number>(term || getCurrentTermForDefault());
   const [cleanupFn, setCleanupFn] = useState<(() => void) | null>(null);
 
   // Cleanup function for unmounting

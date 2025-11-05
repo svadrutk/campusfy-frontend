@@ -12,6 +12,7 @@ import ClassAttributeBadges from "@/components/features/course/badges/ClassAttri
 import { getSchoolFromHostname } from "@/config/themes";
 import { databaseConfigs } from "@/config/database";
 import { ClassData } from "@/types/classes/classTypes";
+import { getCurrentTerm } from "@/lib/termCodes";
 import Script from 'next/script';
 
 // Define types for local use that don't conflict with imported ClassData
@@ -495,10 +496,10 @@ export default function ClassPage() {
                   <div className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full">
                     <h3 className="text-xl font-new-spirit-medium px-5 py-3 bg-gradient-to-r from-[var(--color-primary-border)] to-white border-b border-gray-200">Current Enrollment</h3>
                     <div className="px-4 py-3 flex-1 overflow-auto">
-                      <EnrollmentTable 
-                        classCode={classData.class_code} 
+                      <EnrollmentTable
+                        classCode={classData.class_code}
                         school={schema}
-                        term={1262}
+                        term={getCurrentTerm()}
                       />
                     </div>
                   </div>

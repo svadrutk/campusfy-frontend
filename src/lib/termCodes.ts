@@ -30,11 +30,11 @@ export function getCurrentTerm(): number {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1; // JavaScript months are 0-based
-  
+
   // Calculate the base term code for the year
   // For 2024: base is 1240
   const base = 1240 + ((year - 2024) * 10);
-  
+
   // Determine which term based on the month
   // Spring registration starts in November for next year
   // Fall registration starts in April
