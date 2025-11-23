@@ -338,7 +338,8 @@ export async function GET(request: Request) {
         'Accept': 'application/json',
         'Accept-Language': 'en-US,en;q=0.9',
         'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Pragma': 'no-cache',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       },
       body: JSON.stringify(searchPayload)
     });
@@ -485,7 +486,15 @@ export async function GET(request: Request) {
     // Get the enrollment data using the course ID
     const enrollmentUrl = `https://public.enroll.wisc.edu/api/search/v1/enrollmentPackages/${term}/${subjectCode}/${course.courseId}`;
     
-    const enrollmentResponse = await fetch(enrollmentUrl);
+    const enrollmentResponse = await fetch(enrollmentUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
 
     if (!enrollmentResponse.ok) {
       console.error('Enrollment fetch failed:', await enrollmentResponse.text());
